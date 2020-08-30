@@ -37,12 +37,12 @@ st.write("""
 # Display version plot for each OS
 def version_plot(selected_store):
   if selected_store == 'Apple':
-    from echoreview import apple_scrapper
-    apple_scrapper()
+    from echoreview import apple_plot
+    apple_plot()
     st.pyplot()
   else:
-    from echoreview import google_scrapper
-    google_scrapper()
+    from echoreview import google_plot
+    google_plot()
     st.pyplot()
 
 version_plot(selected_store)

@@ -29,138 +29,28 @@ from sklearn.metrics import confusion_matrix,plot_confusion_matrix,classificatio
 
 
 # Echo apple scrapper only being run in app.py
-def apple_scrapper():
+def apple_plot():
+  apple_df=pd.read_csv("1031922175_GB_overall_28082020.csv")
+  pd.crosstab(apple_df['im:rating'], apple_df['im:version'], margins=True)
+  ct = pd.crosstab(apple_df['im:version'], apple_df['im:rating'])
+  plot = ct.tail(15).plot(kind="bar",figsize=(15, 3))
+  plot.set_xlabel("version")
+  plot.set_ylabel("rating")
+  return plot
 
-  APPID = 1031922175
-  COUNTRY = "GB"
+#get the plot
+def google_plot():
+  google_df=pd.read_csv("echo.co.uk_GB_overall_28082020.csv")
+  pd.crosstab(google_df['score'], google_df['reviewCreatedVersion'], margins=True)
+  ct = pd.crosstab(google_df['reviewCreatedVersion'], google_df['score'])
+  plot = ct.tail(15).plot(kind="bar",figsize=(15, 3))
+  plot.set_xlabel("version")
+  plot.set_ylabel("rating")
+  return plot
 
-  STOREURL = f'http://apps.apple.com/{COUNTRY}/app/id{APPID}'
-  res = requests.get(STOREURL)
-  if res.status_code == 200:
-      appname = re.search('(?<="name":").*?(?=")', res.text).group(0)
-      print(appname)
-
-  #extracting from appstore
-  def extract_itunes(app_id, country="US", pages=1, save=True):
-      for i in range(pages):
-          URL = f"https://itunes.apple.com/{country}/rss/customerreviews/id={app_id}/page={i+1}/sortBy=mostRecent/json"
-          res = requests.get(URL)
-          if res.status_code == 200:
-              entries = res.json()['feed']['entry']
-              if i == 0:
-                  df = pd.DataFrame(columns=list(entries[1].keys())[0:6], index=range(len(entries)))
-
-              for j, entry in enumerate(entries):
-                  for column in df.columns:  
-                      try:
-                          df.loc[j, column] = entry[column]['name']['label']
-                      except:
-                          df.loc[j, column] = entry[column]['label']
-
-              df.set_index('id', inplace=True, drop=False)
-      
-      df.drop('id', axis=1, inplace=True)
-      
-      if save:
-          datenow = datetime.today().strftime('%d/%m/%Y').replace('/', '')
-          filename = f'{app_id}_{country}_{datenow}_AAS.csv'
-          df.to_csv(f"{filename}")
-      
-      df.index = df.index.astype('int64')
-      apple_df = df
-      return apple_df
-          
-  #Have to make the date suitable first. Make sure to adjust according to what you have,
-  #E.g if today's date is 23/8/2020, and your old date is 18/8/2020, then make sure timedelta =5
-  apple_df = extract_itunes(APPID, COUNTRY, pages=10)
-  old_date=datetime.today() - timedelta(days=1)#specifiy the file name of existing file
-  old_date=old_date.strftime('%d/%m/%Y').replace('/', '')
-  existing_file=f'{APPID}_{COUNTRY}_overall_{old_date}.csv' 
-
-  def updating_apple(existing_file, apple_df):
-    datenow = datetime.today().strftime('%d/%m/%Y').replace('/', '')
-    filename=f'{APPID}_{COUNTRY}_overall_{datenow}.csv'
-
-    existing = pd.read_csv(existing_file, index_col="id")
-    if apple_df.index.dtype == existing.index.dtype:
-        # perform an SQL upsert equivalent
-        newrecords = sum(~apple_df.index.isin(existing.index))
-        existing = pd.concat([apple_df[~apple_df.index.isin(existing.index)],existing])
-        existing.to_csv(f"{filename}")
-    return filename
-
-  #use the function to update   
-  filename = updating_apple(existing_file, apple_df)
-  def apple_plot(filename):
-    apple_df=pd.read_csv(f"{filename}")
-    pd.crosstab(apple_df['im:rating'], apple_df['im:version'], margins=True)
-    ct = pd.crosstab(apple_df['im:version'], apple_df['im:rating'])
-    plot = ct.tail(15).plot(kind="bar",figsize=(15, 3))
-    plot.set_xlabel("version")
-    plot.set_ylabel("rating")
-    return plot
-  
-  apple_plot(filename)
-
-
-# Echo google scrapper, only being run in app.py
-
-def google_scrapper():
-  PLAYSTORE_ID = 'echo.co.uk'
-  COUNTRY = 'gb'
-  BATCH_SIZE = 50
-  MAX_REVIEWS = 50000
-  appinfo = app(PLAYSTORE_ID,lang='en',country=COUNTRY)
-  AVAIL_REVIEWS = appinfo.get('reviews')
-  TOFETCH_REVIEWS = min(AVAIL_REVIEWS, MAX_REVIEWS)
-  t = tqdm(total=TOFETCH_REVIEWS)
-
-  for i in range(TOFETCH_REVIEWS//BATCH_SIZE):
-      if i == 0:
-          result, continuation_token = reviews(PLAYSTORE_ID, 
-                                              count=BATCH_SIZE,
-                                              country=COUNTRY
-                                              )         
-      res, continuation_token = reviews(PLAYSTORE_ID, count=BATCH_SIZE, continuation_token=continuation_token)
-      result.extend(res)
-      t.update(BATCH_SIZE)
-  t.close()
-  df_google_ps = pd.DataFrame(result)
-  df_google_ps.drop_duplicates('reviewId', inplace=True)
-  df_google_ps = df_google_ps.set_index('reviewId')
-  datenow = datetime.today().strftime('%d/%m/%Y').replace('/', '')
-  filename = f'{PLAYSTORE_ID}_{COUNTRY}_{datenow}_GPS.csv'
-  df_google_ps.to_csv(f"{filename}") 
-
-  #update oldfile
-  old_date=datetime.today() - timedelta(days=1)#specifiy the file name of existing file
-  old_date=old_date.strftime('%d/%m/%Y').replace('/', '')
-  existing_file=f'{PLAYSTORE_ID}_{COUNTRY.upper()}_overall_{old_date}.csv'
-  existing = pd.read_csv(existing_file, index_col='reviewId')
-
-  newfilename= f'{PLAYSTORE_ID}_{COUNTRY.upper()}_overall_{datenow}.csv' 
-
-  #Basically filename of the df_google_ps after upsert
-  if df_google_ps.index.dtype == existing.index.dtype:
-    print("if statement ran")
-    # perform an SQL upsert equivalent
-    newrecords = sum(~df_google_ps.index.isin(existing.index))
-    existing = pd.concat([df_google_ps[~df_google_ps.index.isin(existing.index)],existing])
-    print(f'{newrecords} new records added. {existing.shape} rows post upsert.')
-
-    existing.to_csv(f"{newfilename}")
-
-  #get the plot
-  def google_plot(filename):
-    google_df=pd.read_csv(f"{filename}")
-    pd.crosstab(google_df['score'], google_df['reviewCreatedVersion'], margins=True)
-    ct = pd.crosstab(google_df['reviewCreatedVersion'], google_df['score'])
-    plot = ct.tail(15).plot(kind="bar",figsize=(15, 3))
-    plot.set_xlabel("version")
-    plot.set_ylabel("rating")
-    return plot
-
-  google_plot(newfilename)
+apple_plot()
+google_plot()
+plt.show()
 
 
 #loading data, optional if scrapper isnt called by scraper
